@@ -6,13 +6,7 @@ its detection results over MQTT. A laptop-side detector parses and compiles one
 YAML complex-event (CE) definition, consumes those observations, and reports CE
 progress to a web visualization.
 
-```text
-Android phones ── observations ──> MQTT ──> detector ──> MongoDB
-Android phones <── start/stop ──── MQTT <── controller     │
-                                             detector ──> visualization
-                                                            │
-                                              MongoDB ───────┘ (history reads)
-```
+![Mobile data collector architecture](docs/basic.png)
 
 Docker runs the long-lived MQTT broker, MongoDB event history, device registry,
 and visualization. The
