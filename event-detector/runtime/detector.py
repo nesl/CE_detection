@@ -9,9 +9,8 @@ import os
 import time
 from urllib import error, request
 
-from .fsm import Observation
+from .observations import labels_from_payload, observations_from_payload
 from language import compile_event, load_event
-from services.persistence import MongoStore
 
 
 class VisualizationClient:
@@ -31,70 +30,6 @@ class VisualizationClient:
             ), timeout=0.25).close()
         except (error.URLError, TimeoutError):
             pass
-
-
-def _pair(pair) -> tuple[str, float] | None:
-    if isinstance(pair, dict):
-        label, confidence = pair.get("first"), pair.get("second", 0)
-    elif isinstance(pair, list) and pair:
-        label, confidence = pair[0], pair[1] if len(pair) > 1 else 0
-    else:
-        return None
-    if not isinstance(label, str):
-        return None
-    return label, float(confidence)
-
-
-def observations_from_payload(payload: bytes, min_confidence: float = 0) -> list[Observation]:
-    text = payload.decode("utf-8")
-    if not text.startswith("detection::"):
-        return []
-    bundle = json.loads(text[len("detection::"):])
-    device = str(bundle.get("dev_id", "unknown"))
-    observations: list[Observation] = []
-
-    for result in bundle.get("detectionResults", []):
-        labels, scores, colors = [], [], []
-        for box in result.get("bboxes", []):
-            label = box.get("clsName")
-            if isinstance(label, str) and float(box.get("cnf", 1)) >= min_confidence:
-                labels.append(label)
-                scores.append(float(box.get("cnf", 1)))
-                color = box.get("color")
-                if isinstance(color, str):
-                    colors.append(color)
-        observations.append(Observation(
-            device=str(result.get("dev_id", device)),
-            timestamp=float(result["timestamp"]) / 1000,
-            modality="vision",
-            labels=tuple(labels),
-            scores=tuple(scores),
-            colors=tuple(colors),
-        ))
-
-    for result in bundle.get("audioResults", []):
-        labels, scores = [], []
-        for raw_event in result.get("events", []):
-            event = _pair(raw_event)
-            if event is not None and event[1] >= min_confidence:
-                labels.append(event[0])
-                scores.append(event[1])
-        observations.append(Observation(
-            device=device,
-            timestamp=float(result["timestamp"]) / 1000,
-            modality="audio",
-            labels=tuple(labels),
-            scores=tuple(scores),
-        ))
-
-    return sorted(observations, key=lambda observation: observation.timestamp)
-
-
-def labels_from_payload(payload: bytes) -> tuple[str, list[str]]:
-    observations = observations_from_payload(payload)
-    if not observations:
-        return "unknown", []
-    return observations[0].device, [label for item in observations for label in item.labels]
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,7 +58,10 @@ def main() -> None:
 
     detector = compile_event(load_event(args.definition))
     visualization = VisualizationClient(args.visualization_url)
-    history = MongoStore(args.mongodb_uri, args.mongodb_database, args.mongodb_collection) if args.mongodb_uri else None
+    history = None
+    if args.mongodb_uri:
+        from services.persistence import MongoStore
+        history = MongoStore(args.mongodb_uri, args.mongodb_database, args.mongodb_collection)
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     if args.username:
         client.username_pw_set(args.username, args.password)

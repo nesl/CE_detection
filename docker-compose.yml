@@ -49,6 +49,46 @@ services:
     depends_on: [mqtt, visualization]
     restart: unless-stopped
 
+  detector:
+    build:
+      context: .
+      dockerfile: event-detector/Dockerfile
+    command:
+      - python
+      - -u
+      - -m
+      - runtime.detector
+      - /app/ce_definitions/${CE_DEFINITION:-iobt_ce3}.yaml
+      - --session
+      - ${CE_SESSION:-default}
+    environment:
+      MQTT_HOST: mqtt
+      CE_VISUALIZATION_URL: http://visualization:5000
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DATABASE: iobt_db
+      MONGODB_COLLECTION: event_history
+    depends_on:
+      - mqtt
+      - visualization
+    restart: unless-stopped
+
+  replay:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: event-detector/Dockerfile
+    command:
+      - python
+      - -m
+      - runtime.replay
+      - /recording
+    environment:
+      MQTT_HOST: mqtt
+    volumes:
+      - ${RECORDING_DIR:-.}:/recording:ro
+    depends_on:
+      - mqtt
+
 volumes:
   registry-data:
   mongodb-data:
