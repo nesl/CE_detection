@@ -1,6 +1,6 @@
-# Mobile Data Collector
+# CE detection
 
-Mobile Data Collector detects complex events from live Android phones or from
+This setup detects complex events from live Android phones or from
 recorded videos. Both inputs follow the same path: YOLO/YAMNet detections are
 published through MQTT and evaluated against a YAML complex-event (CE)
 definition.
